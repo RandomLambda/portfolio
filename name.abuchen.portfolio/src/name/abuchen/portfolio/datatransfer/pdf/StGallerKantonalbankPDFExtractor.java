@@ -5,7 +5,6 @@ import static name.abuchen.portfolio.util.TextUtil.trim;
 
 import java.math.BigDecimal;
 import java.util.Map;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import name.abuchen.portfolio.datatransfer.ExtractorUtils;
@@ -228,7 +227,7 @@ public class StGallerKantonalbankPDFExtractor extends AbstractPDFExtractor
     {
         var combined = nameContinued != null ? name + " " + nameContinued : name;
 
-        Matcher m = NOMINAL_CURRENCY_PATTERN.matcher(combined);
+        var m = NOMINAL_CURRENCY_PATTERN.matcher(combined);
         if (m.find())
             v.put("currency", asCurrencyCode(m.group(1)));
 
