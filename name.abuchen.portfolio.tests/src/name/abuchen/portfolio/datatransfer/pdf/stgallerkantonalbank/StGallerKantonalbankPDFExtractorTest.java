@@ -582,7 +582,7 @@ public class StGallerKantonalbankPDFExtractorTest
         assertThat(results, hasItem(security( //
                         hasIsin("IE000S9YS762"), hasWkn("124625792"), hasTicker(null), //
                         hasName("N-Akt Linde PLC EUR 0.001 nom"), //
-                        hasCurrencyCode("USD"))));
+                        hasCurrencyCode("EUR"))));
 
         // check dividends transaction
         assertThat(results, hasItem(dividend( //
