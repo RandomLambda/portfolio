@@ -4,6 +4,9 @@ import static name.abuchen.portfolio.datatransfer.ExtractorUtils.checkAndSetGros
 import static name.abuchen.portfolio.util.TextUtil.trim;
 
 import java.math.BigDecimal;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import name.abuchen.portfolio.datatransfer.ExtractorUtils;
 import name.abuchen.portfolio.datatransfer.pdf.PDFParser.Block;
@@ -206,6 +209,32 @@ public class StGallerKantonalbankPDFExtractor extends AbstractPDFExtractor
         addFeesSectionsTransaction(pdfTransaction, type);
     }
 
+    // @formatter:off
+    // Matches the nominal-value suffix embedded in a security name, e.g.
+    // "N-Akt Linde PLC EUR 0.001 nom" or "N-Akt Apple Inc USD 0.00001 nom".
+    // This denotes the security's own (home) currency and can differ from
+    // the currency a particular dividend happens to be paid in (e.g. a
+    // EUR-denominated stock paying a USD distribution).
+    // @formatter:on
+    private static final Pattern NOMINAL_CURRENCY_PATTERN = Pattern.compile("\\b([A-Z]{3})\\s+[\\.'\\d]+\\s+nom\\b");
+
+    /**
+     * If the security name carries an explicit nominal-value currency (see
+     * {@link #NOMINAL_CURRENCY_PATTERN}), it takes precedence over the
+     * currency inferred from the distribution/payment amount, since the
+     * latter need not match the security's own trading currency.
+     */
+    private Map<String, String> overrideWithNominalCurrency(Map<String, String> v, String name, String nameContinued)
+    {
+        var combined = nameContinued != null ? name + " " + nameContinued : name;
+
+        Matcher m = NOMINAL_CURRENCY_PATTERN.matcher(combined);
+        if (m.find())
+            v.put("currency", asCurrencyCode(m.group(1)));
+
+        return v;
+    }
+
     private void addDividendeTransaction()
     {
         final var type = new DocumentType("Baraussch.ttung");
@@ -236,7 +265,7 @@ public class StGallerKantonalbankPDFExtractor extends AbstractPDFExtractor
                                                         .match("^(?<nameContinued>.*)$") //
                                                         .match("^(.*\\s)?Valoren\\-Nr\\.: (?<wkn>[A-Z0-9]{5,9}), ISIN: (?<isin>[A-Z]{2}[A-Z0-9]{9}[0-9])$") //
                                                         .match("^Aussch.ttung: (?<currency>[A-Z]{3}) [\\.'\\d]+$") //
-                                                        .assign((t, v) -> t.setSecurity(getOrCreateSecurity(v))) //
+                                                        .assign((t, v) -> t.setSecurity(getOrCreateSecurity(overrideWithNominalCurrency(v, v.get("name"), v.get("nameContinued"))))) //
                                         , //
                                         // @formatter:off
                                         // 10'000 N-Akt TUI AG Aus Konversion
@@ -251,8 +280,19 @@ public class StGallerKantonalbankPDFExtractor extends AbstractPDFExtractor
                                         // Valoren-Nr.: 957150, ISIN: US6541061031
                                         // Ausschüttung: USD 0.41
                                         //
+                                        // 100 N-Akt Linde PLC EUR 0.001 nom
+                                        // Namenaktien Valoren-Nr.: 124625792, ISIN: IE000S9YS762
+                                        // Ausschüttung: USD 1.60
+                                        //
                                         // The "Valoren-Nr.:" line may or may not have prefix text (e.g. a share
                                         // class continuation like "Namenaktien") before it.
+                                        //
+                                        // The security's home/nominal currency (embedded in the name as
+                                        // "<currency> <nominal value> nom", e.g. "EUR 0.001 nom") does not always
+                                        // match the currency the distribution is paid in - e.g. a EUR-denominated
+                                        // stock (Linde PLC) can pay a USD dividend. In that case the security must
+                                        // keep its own EUR currency rather than being tainted by the USD payment
+                                        // currency picked up from the "Ausschüttung:" line.
                                         // @formatter:on
                                         section -> section //
                                                         .attributes("name", "wkn", "isin", "currency") //
@@ -260,7 +300,7 @@ public class StGallerKantonalbankPDFExtractor extends AbstractPDFExtractor
                                                         .match("^[\\.'\\d]+ (?<name>.*)$") //
                                                         .match("^(.*\\s)?Valoren\\-Nr\\.: (?<wkn>[A-Z0-9]{5,9}), ISIN: (?<isin>[A-Z]{2}[A-Z0-9]{9}[0-9])$") //
                                                         .match("^Aussch.ttung: (?<currency>[A-Z]{3}) [\\.'\\d]+$") //
-                                                        .assign((t, v) -> t.setSecurity(getOrCreateSecurity(v))) //
+                                                        .assign((t, v) -> t.setSecurity(getOrCreateSecurity(overrideWithNominalCurrency(v, v.get("name"), null)))) //
                         )
 
                         // @formatter:off
